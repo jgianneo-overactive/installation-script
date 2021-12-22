@@ -1,13 +1,19 @@
 import os
+import re
+import yaml
 import shutil
 
 
-def unpackage_jar():
-    return 0
+def unpackage_jar(jarName):
+    unpackageJar = 'jar xf ' + jarName
+    os.system(unpackageJar)
 
 
-def package_jar():
-    return 0
+def package_jar(jarName, list):
+    packageJarPath = 'jar cf ' + jarName + ''
+    for name in list:
+        packageJarPath = packageJarPath + " " + name
+    os.system(packageJarPath)
 
 
 def create_folder(path):
@@ -20,25 +26,70 @@ def create_folder(path):
 def create_file(path, content):
     with open(path, 'w+') as f:
         f.write(content)
-    print("Created file: " + path)
 
 
 def copy_file(path, destination):
-    shutil.copyfile(path, destination)
+    shutil.copy(path, destination, follow_symlinks=True)
     print("Copying " + path + " to " + destination)
 
 
 def change_file_name(path, new):
     os.rename(path, new)
-    print("Created file: ")
+    print("Changed file: " + new)
 
 
 def run_command(command):
     os.system(command)
 
 
-def modify_file_content():
-    return 0
+def path_to_list(line):
+    newline = line[0:line.index(':')]
+    return list(newline.split("."))
+
+
+def change_element(yml, value, path):
+    first = path[0]
+    element = yml[first]
+    path.remove(first)
+    if len(path) > 0 and (type(element) is dict or type(element) is list):
+        change_element(element, value, path)
+    else:
+        yml[first] = value
+
+def replace_file_content(file, variable, value):
+    text = file.read()
+    newContent = re.sub(variable, value, text)
+    print(newContent)
+    file.write(newContent)
+
+def yml_edit():
+    unpackage_jar("uy-edge-mobile-1.0.jar")
+    choose = input("Write an option: 'qa', 'dev' or 'prod'. Nothing for default")
+    sub = ""
+    if choose == "qa" or choose == "QA":
+        sub = "-qa"
+        print("qa selected, opening application-qa.yml")
+    if choose == "dev" or choose == "DEV":
+        sub = "-dev"
+        print("dev selected, opening application-dev.yml")
+    if choose == "prod" or choose == "PROD":
+        sub = "-prod"
+    else:
+        print("Opening application.yml by default")
+
+    with open("BOOT-INF/classes/application" + sub + ".yml", 'r') as file:
+        yml_file = yaml.safe_load(file)
+    installer = open("installation.yml")
+    for line in installer:
+        if line.find(': ') > -1:
+            print(line)
+            answer = input()
+            if len(answer) > 0:
+                change_element(yml_file, answer, path_to_list(line))
+
+    with open("BOOT-INF/classes/application" + sub + ".yml", 'w') as new_file:
+        yaml.dump(yml_file, new_file)
+    package_jar("uy-edge-mobile-1.2.jar", ["BOOT-INF", "META-INF", "org"])
 
 
 if __name__ == '__main__':
