@@ -1,7 +1,10 @@
+import getpass
 import os
 import re
+import sys
 import yaml
 import shutil
+import base64
 
 
 def unpackage_jar(jarname):
@@ -38,6 +41,10 @@ def change_file_name(path, new):
     print("Created file: ")
 
 
+def run_command(command):
+    os.system(command)
+
+
 def replace_file_content(file, variable, value):
     text = file.read()
     newcontent = re.sub(variable, value, text)
@@ -45,50 +52,63 @@ def replace_file_content(file, variable, value):
     file.write(newcontent)
 
 
-def modify_yml_jar(jarname):
+def modify_yml_jar(jarname, ymlconfigname):
     unpackage_jar(jarname)
-    choose = input("Write an option: 'qa', 'dev' or 'prod'. Nothing for default")
+    choose = input("Escribir una opcion: 'qa', 'dev' o 'prod'. Por defecto: application.yml ").lower()
     sub = ""
-    if choose == "qa" or choose == "QA":
+    if choose == "qa":
         sub = "-qa"
-        print("qa selected, opening application-qa.yml")
-    if choose == "dev" or choose == "DEV":
+        print("qa seleleccionado, abriendo application-qa.yml")
+    if choose == "dev":
         sub = "-dev"
-        print("dev selected, opening application-dev.yml")
-    if choose == "prod" or choose == "PROD":
+        print("dev seleccionado, abriendo application-dev.yml")
+    if choose == "prod":
         sub = "-prod"
-    else:
-        print("Opening application.yml by default")
+        print("prod seleccionado, abriendo application-prod.yml")
+    if sub == "":
+        print("Abriendo application.yml por defecto")
 
     with open("BOOT-INF/classes/application" + sub + ".yml", 'r') as file:
         yml_file = yaml.safe_load(file)
-    installer = open("installation.yml")
+    installer = open(ymlconfigname)
 
     for line in installer:
         if line.find(': ') > -1:
+            print(yml_file)
             print(line + " Valor actual: ")
             print(parse_int(get_element(yml_file, path_to_list(line))))
-            answer = input()
+            if get_type_line(line) == "password":
+                passinput = getpass.getpass()
+                if len(passinput) > 0:
+                    answer = like_password(passinput)
+            else:
+                answer = input()
             if len(answer) > 0:
-                if "uy-edge-mobile_bins:" in line:
+                if get_type_line(line) == "list":
                     answer = like_list(answer)
-                if "security_resource_enabled:" in line or "rest-config_restConnectors_0_apacheHttpClientDetails_enableHostNameVerifier:" in line:
+                if get_type_line(line) == "boolean":
                     answer = like_boolean(answer)
                 change_element(yml_file, answer, path_to_list(line))
     with open("BOOT-INF/classes/application" + sub + ".yml", 'w') as new_file:
         yaml.dump(yml_file, new_file)
-    print("Packing jar " + jarname)
+    print("Generando jar " + jarname)
     package_jar(jarname, ["BOOT-INF", "META-INF", "org"])
 
 
+def get_type_line(line):
+    return line[line.index('[')+1:line.index(']')]
+
+
 def path_to_list(line):
-    newline = line[0:line.index(':')]
-    return list(newline.split("_"))
+    newline = line[0:line.index('[')]
+    return list(newline.split("/"))
 
 
 def change_element(yml, value, path):
     first = parse_int(path[0])
-    element = yml[first]
+    element = yml.get(first)
+    if element is None:
+        yml[first] = None
     path.remove(path[0])
     if len(path) > 0:
         if type(element) is dict or type(element) is list:
@@ -102,7 +122,10 @@ def get_element(yml, path):
         element = path[0]
         new_path = path.copy()
         new_path.remove(element)
-        return get_element(yml[parse_int(element)], new_path)
+        if yml.get(parse_int(element)) is None:
+            print("No es posible mostrar el valor")
+        else:
+            return get_element(yml[parse_int(element)], new_path)
     else:
         return yml
 
@@ -125,25 +148,33 @@ def parse_int(answer):
 
 
 def like_boolean(answer):
-    return answer == 'true' or answer == 'TRUE' or answer == 'True'
+    return answer.lower() == 'true'
+
+
+def like_password(answer):
+    answer_bytes = answer.encode('ascii')
+    a = base64.b64encode(answer_bytes)
+    return "encoded:" + a.decode('ascii')
 
 
 def find_extension_files(type):
+    file_list = []
     extension = "." + type
     for file in os.listdir("."):
         if file.endswith(extension):
-            return file
+            file_list.insert(0, file)
+    return file_list
 
 
 if __name__ == '__main__':
-    name = "uy-edge-mobile-1.0"
-    jarname = name + ".jar"
-    modify_yml_jar(jarname)
-    print("Moving jar " + jarname + " to etc/systemd/system")
-    shutil.move(jarname, "etc/systemd/system")
-    serverfile = find_extension_files("service")
-    print("Service found: " + serverfile)
-    if serverfile is not None:
-        shutil.move(serverfile, "etc/systemd/system")
-    #os.system("systemctl daemon-reload")
-    #os.system("systemctl start uy-adapter-soft-token.service")
+    jarname = sys.argv[1]
+    servicename = sys.argv[2]
+    ymlconfigname = sys.argv[3]
+    modify_yml_jar(jarname, ymlconfigname)
+    print("Moviendo " + jarname + " a etc/systemd/system")
+    #shutil.move(jarname, "etc/systemd/system")
+    if os.path.exists(servicename):
+        print("Moviendo " + servicename + " a etc/systemd/system")
+        shutil.move(servicename, "etc/systemd/system")
+    else:
+        print("No encontrado servicio con el nombre: " + servicename)
