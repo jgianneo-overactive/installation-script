@@ -122,7 +122,7 @@ def get_element(yml, path):
         element = path[0]
         new_path = path.copy()
         new_path.remove(element)
-        if yml.get(parse_int(element)) is None:
+        if yml[parse_int(element)] is None:
             print("No es posible mostrar el valor")
         else:
             return get_element(yml[parse_int(element)], new_path)
