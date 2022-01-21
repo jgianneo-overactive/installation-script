@@ -3,7 +3,6 @@ import os
 import re
 import sys
 import yaml
-import shutil
 import base64
 
 
@@ -19,40 +18,8 @@ def package_jar(jarname, list):
     os.system(packagejarpath)
 
 
-def create_folder(path):
-    if os.path.exists(path):
-        shutil.rmtree(path)
-    os.makedirs(path)
-    print("Created new folder: " + path)
-
-
-def create_file(path, content):
-    with open(path, 'w+') as f:
-        f.write(content)
-
-
-def copy_file(path, destination):
-    shutil.copy(path, destination, follow_symlinks=True)
-    print("Copying " + path + " to " + destination)
-
-
-def change_file_name(path, new):
-    os.rename(path, new)
-    print("Created file: ")
-
-
-def run_command(command):
-    os.system(command)
-
-
-def replace_file_content(file, variable, value):
-    text = file.read()
-    newcontent = re.sub(variable, value, text)
-    print(newcontent)
-    file.write(newcontent)
-
-
 def modify_yml_jar(jarname, ymlconfigname):
+    print("Descomprimiendo " + jarname)
     unpackage_jar(jarname)
     choose = input("Escribir una opcion: 'qa', 'dev' o 'prod'. Por defecto: application.yml ").lower()
     sub = ""
@@ -106,9 +73,16 @@ def path_to_list(line):
 
 def change_element(yml, value, path):
     first = parse_int(path[0])
-    element = yml.get(first)
+    if type(yml) is dict:
+        element = yml.get(first)
+    else:
+        element = yml[parse_int(first)]
     if element is None:
-        yml[first] = None
+        if len(path) > 0:
+            yml[first] = {}
+        else:
+            yml[first] = value
+    element = yml[first]
     path.remove(path[0])
     if len(path) > 0:
         if type(element) is dict or type(element) is list:
@@ -122,7 +96,7 @@ def get_element(yml, path):
         element = path[0]
         new_path = path.copy()
         new_path.remove(element)
-        if yml[parse_int(element)] is None:
+        if type(yml) is dict and element not in yml:
             print("No es posible mostrar el valor")
         else:
             return get_element(yml[parse_int(element)], new_path)
@@ -157,24 +131,7 @@ def like_password(answer):
     return "encoded:" + a.decode('ascii')
 
 
-def find_extension_files(type):
-    file_list = []
-    extension = "." + type
-    for file in os.listdir("."):
-        if file.endswith(extension):
-            file_list.insert(0, file)
-    return file_list
-
-
 if __name__ == '__main__':
     jarname = sys.argv[1]
-    servicename = sys.argv[2]
-    ymlconfigname = sys.argv[3]
+    ymlconfigname = sys.argv[2]
     modify_yml_jar(jarname, ymlconfigname)
-    print("Moviendo " + jarname + " a etc/systemd/system")
-    #shutil.move(jarname, "etc/systemd/system")
-    if os.path.exists(servicename):
-        print("Moviendo " + servicename + " a etc/systemd/system")
-        shutil.move(servicename, "etc/systemd/system")
-    else:
-        print("No encontrado servicio con el nombre: " + servicename)
